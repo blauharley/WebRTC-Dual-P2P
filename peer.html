@@ -1,0 +1,118 @@
+﻿<html>
+<head>
+<title>Video-Chat Socket.io</title>
+
+<script src="socket.io/socket.io.js"></script>
+<script>
+  
+  window.onload = function(){
+    
+    var otherPeers = [];
+    var clientSocket = null
+    var pc = new webkitRTCPeerConnection({ "iceServers": [{ "url": "stun:provserver.televolution.net" },{ "url": "stun:stun1.voiceeclipse.net" }] });
+    var offerSent = false;
+    var stream = null;
+    
+    function setupClient(){
+      
+      clientSocket = io.connect('http://localhost:8001'); //37.200.99.34
+      
+      clientSocket.on('connect', function () {
+        
+        console.log('peer connected');
+        
+      });
+      
+       
+      clientSocket.on('client_socket', function (data) {
+        //console.log(data);
+        if(data == '0'){
+          
+          pc.createOffer(gotOfferDescription);
+          offerSent = true;
+        }
+        else if(data.type == 'description'){
+          
+          if(!offerSent){
+            pc.setRemoteDescription( new RTCSessionDescription(data.info) ); 
+            pc.createAnswer(gotAnswerDescription);
+          }
+          else
+            pc.setRemoteDescription( new RTCSessionDescription(data.info) ); 
+           
+          
+        }
+        else if(data.type == 'candidate'){
+          console.log('onicecandidate set',data);
+          pc.addIceCandidate( new RTCIceCandidate(data.info) );
+        }
+        else if(data == 'reset'){
+          console.log('reset');
+          pc.close();
+          alert('other peer has reloaded, please reload whole page too')
+        }
+        
+      });
+      
+      function gotOfferDescription(desc){ 
+        console.log(desc);
+        pc.setLocalDescription(desc); 
+        clientSocket.emit('server_socket', {type: 'description',info : desc}); 
+      }
+      
+      function gotAnswerDescription(desc){ 
+        console.log(desc);
+        pc.setLocalDescription(desc); 
+        clientSocket.emit('server_socket', {type: 'description',info : desc});
+      }
+      
+      pc.onicecandidate = function(event){
+        console.log(event);
+        if (event.candidate) {
+          //console.log('onicecandidate called');
+          clientSocket.emit('server_socket', {type: 'candidate',info: event.candidate});  
+        }
+      };
+      
+      pc.onaddstream = function(e){ 
+        console.log('stream received', e);
+        document.getElementById('videostreamOutput').src = webkitURL.createObjectURL(e.stream); 
+        document.getElementById('videostreamOutput').style.display = 'inline';
+      };
+      
+      pc.onerror = function(){
+        console.log('pc-error happened');
+      };
+    }
+    
+    setTimeout(function(){ console.log(pc); },5000);
+    
+    (function(){
+      navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia ||
+      navigator.mozGetUserMedia || navigator.msGetUserMedia;
+      window.URL = window.URL || window.webkitURL;
+
+      navigator.getUserMedia({video: true, audio:true}, function(localMediaStream) {
+          
+          document.getElementById('myStream').src = webkitURL.createObjectURL(localMediaStream);
+          document.getElementById('myStream').style.display = 'inline';
+
+          pc.addStream(localMediaStream);
+          setupClient();
+          
+      });
+      
+    })();
+    
+  };
+  
+</script>
+</head>
+<body>	
+
+<!-- this tag is used to show stream of another peer -->
+<video id="videostreamOutput" style="display:none" width="500" height="500" autoplay></video><br />
+<video id="myStream" style="display:none" width="100" height="100" autoplay></video>
+
+</body>
+</html>
